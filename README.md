@@ -17,26 +17,50 @@ luarocks install os-urandom
 ## Usage
 
 ```lua
+local dump = require('dump')
 local urandom = require('os.urandom')
 
 -- open a `/dev/urandom` file descriptor and return an instance of os.urandom
 local u = assert(urandom())
-print(u) -- os.urandom: ...
+print(u) -- os.urandom: 0x600003e308d8
 
 -- read 32 bytes of random data from `/dev/urandom` into the internal buffer.
-assert(u:read(32))
+local nread = assert(u:read(32))
+print(nread) -- 32
 
 -- get the 5 bytes of string from the internal buffer.
 local s = assert(u:bytes(5))
+print(dump(s)) -- "k???k"
 
 -- get the 4 elements of uint8 values
-local arr8 = assert(u:get8u(4))
+local arr = assert(u:get8u(4))
+print(dump(arr))
+-- {
+--     [1] = 107,
+--     [2] = 178,
+--     [3] = 140,
+--     [4] = 249
+-- }
 
 -- get the 4 elements of uint16 values
-local arr16 = assert(u:get16u(4))
+arr = assert(u:get16u(4))
+print(dump(arr))
+-- {
+--     [1] = 45675,
+--     [2] = 63884,
+--     [3] = 4203,
+--     [4] = 35505
+-- }
 
 -- get the 4 elements of uint32 values
-local arr32 = assert(u:get32u(4))
+arr = assert(u:get32u(4))
+print(dump(arr))
+-- {
+--     [1] = 4186747499,
+--     [2] = 2326859883,
+--     [3] = 3084003331,
+--     [4] = 1269583660
+-- }
 
 -- close the `/dev/urandom` file descriptor.
 -- you cannot use this instance after calling this method.
