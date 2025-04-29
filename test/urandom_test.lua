@@ -7,6 +7,16 @@ function testcase.urandom()
     local u, err = urandom()
     assert.is_nil(err)
     assert.re_match(u, '^os.urandom: ')
+
+    -- test that use /dev/random to get random bytes
+    u, err = urandom('/dev/random')
+    assert.is_nil(err)
+    assert.re_match(u, '^os.urandom: ')
+
+    -- test that return error with invalid path
+    u, err = urandom('/invalid/path')
+    assert.not_nil(err)
+    assert.is_nil(u)
 end
 
 function testcase.bytes()
