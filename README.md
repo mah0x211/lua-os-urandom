@@ -69,9 +69,13 @@ u:close()
 the following functions return an `error` object created by https://github.com/mah0x211/lua-errno module.
 
 
-## u, err = urandom()
+## u, err = urandom( [pathname] )
 
-open `/dev/urandom` and return an `os.urandom` instance.
+open `/dev/urandom` or specified pathname and return an instance of `os.urandom`.
+
+**Parameters**
+
+- `pathname:string?`: path to the random source. if omitted, `/dev/urandom` will be opened by default.
 
 **Returns**
 
@@ -82,7 +86,13 @@ open `/dev/urandom` and return an `os.urandom` instance.
 
 ```lua
 local urandom = require('os.urandom')
-local u, err = urandom()
+
+-- open the default random source (`/dev/urandom`).
+local u = assert(urandom())
+print(u) -- os.urandom: ...
+
+-- open a custom random source.
+u = assert(urandom('/dev/random'))
 print(u) -- os.urandom: ...
 ```
 

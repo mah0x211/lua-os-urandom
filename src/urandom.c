@@ -188,7 +188,8 @@ static int gc_lua(lua_State *L)
 
 static int new_lua(lua_State *L)
 {
-    urandom_t *u = lua_newuserdata(L, sizeof(urandom_t));
+    const char *pathname = lauxh_optstr(L, 1, "/dev/urandom");
+    urandom_t *u         = lua_newuserdata(L, sizeof(urandom_t));
 
     *u = (urandom_t){
         .fd      = -1,
@@ -199,7 +200,7 @@ static int new_lua(lua_State *L)
     lauxh_setmetatable(L, MODULE_MT);
 
     // open the urandom file descriptor
-    u->fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+    u->fd = open(pathname, O_RDONLY | O_CLOEXEC);
     if (u->fd < 0) {
         lua_pushnil(L);
         lua_errno_new(L, errno, "os.urandom");
