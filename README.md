@@ -24,10 +24,6 @@ local urandom = require('os.urandom')
 local u = assert(urandom())
 print(u) -- os.urandom: 0x600003e308d8
 
--- read 32 bytes of random data from `/dev/urandom` into the internal buffer.
-local nread = assert(u:read(32))
-print(nread) -- 32
-
 -- get the 5 bytes of string from the internal buffer.
 local s = assert(u:bytes(5))
 print(dump(s)) -- "k???k"
@@ -95,69 +91,38 @@ print(u) -- os.urandom: ...
 close the `/dev/urandom` file descriptor and free the internal buffer. you cannot use this instance after calling this method.
 
 
-## nread, err = urandom:read( nbyte )
+## s, err = urandom:bytes( nbyte )
 
-read a specified number of bytes from `/dev/urandom` into the internal buffer. this method replaces the old data with the new data.
-
-**you must call this method before using the following methods: `bytes`, `get8u`, `get16u`, and `get32u`.**
+get specified number of bytes as a string.
 
 **Parameters**
 
-- `nbyte:pint`: number of bytes to read (must be positive). if omitted, read all remaining bytes.
-
-**Returns**
-
-- `nread:integer?`: number of bytes read, or `nil` if an error occurs.
-- `err:any`: error object if an error occurs.
-
-
-## s, err = urandom:bytes( [nbyte] [, offset] )
-
-get specified number of bytes as a string from the internal buffer. 
-
-you must call `urandom:read()` before calling this method.
-
-**Parameters**
-
-- `nbyte:pint`: number of bytes to get. if omitted, all remaining bytes are returned.
+- `nbyte:pint`: number of bytes to get.
 - `offset:pint`: starting byte offset. defaults to `1`.
 
 **Returns**
 
-- `s:string?`: string containing the specified number of bytes, or `nil` if `offset` exceeds available data or if an error occurs.
+- `s:string?`: string containing the specified number of bytes, or `nil` if an error occurs.
 - `err:any`: error object if an error occurs.
 
-**NOTE:** 
 
-if the remaining bytes are fewer than `nbyte`, the available bytes are returned without an error.
+## arr, err = urandom:get8u( count )
 
-
-## arr, err = urandom:get8u( [count] [, offset] )
-
-get uint8 integers from the internal buffer.
-
-you must call `urandom:read()` before calling this method.
+get uint8 integers.
 
 **Parameters**
 
-- `count:pint`: number of elements to get. if omitted, all remaining count are returned.
-- `offset:pint`: starting element offset. default to `1`.
+- `count:pint`: number of elements to get.
 
 **Returns**
 
-- `arr:table?`: table containing the specified number of integers, or `nil` if insufficient data or if an error occurs.
+- `arr:table?`: table containing the specified number of integers, or `nil` if an error occurs.
 - `err:any`: error object if an error occurs.
 
-**NOTE:**
 
-if the remaining bytes are fewer than `count`, it returns an error.
+## arr, err = urandom:get16u( count )
 
-for example, if you call `urandom:get8u(4, 5)` it means that gets `4` elements at element offset `5`. if the remaining bytes are fewer than `count * 8-bit(1-byte)`, it returns an insufficient error.
-
-
-## arr, err = urandom:get16u( [count] [, offset] )
-
-get uint16 integers from the internal buffer.
+get uint16 integers.
 
 **Parameters**
 
@@ -170,7 +135,7 @@ same as `urandom:get8u()`.
 
 ## arr, err = urandom:get32u( [count] [, offset] )
 
-get uint32 integers from the internal buffer.
+get uint32 integers.
 
 **Parameters**
 

@@ -36,7 +36,6 @@
 typedef struct {
     int fd;
     int ref_buf;
-    size_t cap;
     size_t len;
     union {
         uint8_t *i8;
@@ -46,15 +45,12 @@ typedef struct {
     };
 } urandom_t;
 
-static inline int getu_lua(lua_State *L, const char *op, int nbit)
+static int read_urandom(lua_State *L, urandom_t *u, size_t nbyte,
+                        const char *op)
 {
-    urandom_t *u    = luaL_checkudata(L, 1, MODULE_MT);
-    size_t count    = (size_t)lauxh_optpint(L, 2, -1);
-    size_t offset   = (size_t)lauxh_optpint(L, 3, 1) - 1; // 1-based index
-    size_t byte     = nbit / 8;
-    size_t maxcount = u->len / byte;
-    char buf[512]   = {};
-    char *errmsg    = buf;
+    char *buf     = NULL;
+    char *ptr     = NULL;
+    size_t remain = nbyte;
 
     if (u->fd == -1) {
         // fd is not opened
@@ -64,34 +60,44 @@ static inline int getu_lua(lua_State *L, const char *op, int nbit)
         return 2;
     }
 
-    if (offset >= maxcount) {
-        // out of range
-        snprintf(errmsg, sizeof(buf),
-                 "failed to get elements (%d-bit width) at element "
-                 "offset %zu: out of range",
-                 nbit, offset + 1);
+    buf = (nbyte != u->len) ? lua_newuserdata(L, nbyte) : u->buf;
+    ptr = buf;
+    while (remain > 0) {
+        ssize_t n = read(u->fd, ptr, remain);
+        if (n > 0) {
+            remain -= (size_t)n;
+            ptr += n;
+            continue;
+        }
+
+        // got error
+        if (n == 0) {
+            errno = EIO;
+        }
         lua_pushnil(L);
-        errno = EINVAL;
-        lua_errno_new_with_message(L, errno, op, errmsg);
+        lua_errno_new(L, errno, op);
         return 2;
     }
-    maxcount -= offset;
 
-    if (count == SIZE_MAX) {
-        // no count specified
-        count = maxcount;
+    if (buf != u->buf) {
+        u->buf     = buf;
+        u->len     = nbyte;
+        u->ref_buf = lauxh_unref(L, u->ref_buf);
+        u->ref_buf = lauxh_ref(L);
     }
 
-    if (count > maxcount) {
-        // insufficient data
-        snprintf(errmsg, sizeof(buf),
-                 "failed to get %zu elements (%d-bit width) at element "
-                 "offset %zu: insufficient data",
-                 count, nbit, offset + 1);
-        lua_pushnil(L);
-        errno = EINVAL;
-        lua_errno_new_with_message(L, errno, op, errmsg);
-        return 2;
+    return 0;
+}
+
+static inline int getu_lua(lua_State *L, const char *op, int nbit)
+{
+    urandom_t *u = luaL_checkudata(L, 1, MODULE_MT);
+    size_t count = (size_t)lauxh_checkpint(L, 2);
+    int rc       = read_urandom(L, u, count * (nbit / 8), op);
+
+    if (rc != 0) {
+        // read error
+        return rc;
     }
 
     lua_settop(L, 1);
@@ -99,7 +105,7 @@ static inline int getu_lua(lua_State *L, const char *op, int nbit)
 
 #define push_ival(v)                                                           \
     do {                                                                       \
-        typeof(v) p = (v) + offset;                                            \
+        typeof(v) p = (v);                                                     \
         for (size_t i = 1; i <= count; i++) {                                  \
             lauxh_pushint2arr(L, i, *p);                                       \
             p++;                                                               \
@@ -136,52 +142,15 @@ static int get8u_lua(lua_State *L)
 
 static int bytes_lua(lua_State *L)
 {
-    urandom_t *u  = luaL_checkudata(L, 1, MODULE_MT);
-    size_t nbyte  = (size_t)lauxh_optpint(L, 2, u->len);
-    size_t offset = (size_t)lauxh_optpint(L, 3, 1) - 1; // 1-based index
-    size_t maxlen = u->len;
-
-    if (u->fd == -1) {
-        // fd is not opened
-        lua_pushnil(L);
-        errno = EBADF;
-        lua_errno_new(L, errno, "os.urandom.bytes");
-        return 2;
-    } else if (offset >= u->len) {
-        // no data
-        lua_pushnil(L);
-        return 1;
-    }
-    maxlen -= offset;
-
-    if (nbyte > maxlen) {
-        // no enough data, adjust the nbyte
-        nbyte = maxlen;
-    }
-    lua_pushlstring(L, u->buf + offset, nbyte);
-    return 1;
-}
-
-static int read_lua(lua_State *L)
-{
     urandom_t *u = luaL_checkudata(L, 1, MODULE_MT);
     size_t nbyte = (size_t)lauxh_checkpint(L, 2);
-    char *buf    = (nbyte != u->cap) ? lua_newuserdata(L, nbyte) : u->buf;
-    ssize_t n    = read(u->fd, buf, nbyte);
+    int rc       = read_urandom(L, u, nbyte, "os.urandom.bytes");
 
-    if (n < 0) {
-        // got error
-        lua_pushnil(L);
-        lua_errno_new(L, errno, "os.urandom.read");
-        return 2;
-    } else if (buf != u->buf) {
-        u->buf     = buf;
-        u->cap     = nbyte;
-        u->ref_buf = lauxh_unref(L, u->ref_buf);
-        u->ref_buf = lauxh_ref(L);
+    if (rc != 0) {
+        // read error
+        return rc;
     }
-    u->len = (size_t)n;
-    lua_pushinteger(L, n);
+    lua_pushlstring(L, u->buf, nbyte);
     return 1;
 }
 
@@ -224,7 +193,6 @@ static int new_lua(lua_State *L)
     *u = (urandom_t){
         .fd      = -1,
         .buf     = NULL,
-        .cap     = 0,
         .len     = 0,
         .ref_buf = LUA_NOREF,
     };
@@ -252,7 +220,6 @@ LUALIB_API int luaopen_os_urandom(lua_State *L)
         };
         struct luaL_Reg method[] = {
             {"close",  close_lua },
-            {"read",   read_lua  },
             {"bytes",  bytes_lua },
             {"get8u",  get8u_lua },
             {"get16u", get16u_lua},
