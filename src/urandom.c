@@ -28,9 +28,9 @@
 #include <stdio.h>
 #include <unistd.h>
 // lua
-#include "../deps/secrandom/src/secrandom.h"
 #include "lauxhlib.h"
 #include "lua_errno.h"
+#include "secrandom.h"
 
 #define MODULE_MT "os.urandom"
 
