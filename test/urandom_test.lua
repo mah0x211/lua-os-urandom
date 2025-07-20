@@ -4,23 +4,12 @@ local urandom = require('os.urandom')
 
 function testcase.urandom()
     -- test that create a urandom instance
-    local u, err = urandom()
-    assert.is_nil(err)
+    local u = urandom()
     assert.re_match(u, '^os.urandom: ')
-
-    -- test that use /dev/random to get random bytes
-    u, err = urandom('/dev/random')
-    assert.is_nil(err)
-    assert.re_match(u, '^os.urandom: ')
-
-    -- test that return error with invalid path
-    u, err = urandom('/invalid/path')
-    assert.not_nil(err)
-    assert.is_nil(u)
 end
 
 function testcase.bytes()
-    local u = assert(urandom())
+    local u = urandom()
 
     -- test that get N bytes
     local data = assert(u:bytes(9))
@@ -32,7 +21,7 @@ function testcase.bytes()
 end
 
 function testcase.get8u()
-    local u = assert(urandom())
+    local u = urandom()
 
     -- test that get 5 elements as 8bit integer array
     local arr = assert(u:get8u(5))
@@ -49,7 +38,7 @@ function testcase.get8u()
 end
 
 function testcase.get16u()
-    local u = assert(urandom())
+    local u = urandom()
 
     -- test that get as uint16 array
     local arr = assert(u:get16u(8))
@@ -62,7 +51,7 @@ function testcase.get16u()
 end
 
 function testcase.get32u()
-    local u = assert(urandom())
+    local u = urandom()
 
     -- test that get as uint32 array
     local arr = assert(u:get32u(4))
@@ -74,20 +63,39 @@ function testcase.get32u()
     end
 end
 
-function testcase.close()
-    local u = assert(urandom())
+function testcase.overflow()
+    local u = urandom()
 
-    -- test that close the urandom instance
+    -- test that returns error for count overflow
+    -- INT_MAX + 1 should trigger the lua_createtable limit check
+    local int_max_plus_one = 0x7FFFFFFF + 1  -- INT_MAX + 1 (2^31)
+    local data, err = u:get32u(int_max_plus_one)
+    assert.is_nil(data)
+    assert.match(err, 'ERANGE')
+end
+
+function testcase.close()
+    local u = urandom()
+
+    -- test that close the urandom file descriptor if it is open
     u:close()
 
-    -- test that return EBADF error
+    -- test that can still call methods after close
+    -- this is to ensure that the instance is not destroyed
+    -- and can still be used
     for _, method in ipairs({
         'bytes',
         'get8u',
         'get16u',
         'get32u',
     }) do
-        local _, err = u[method](u, 1)
-        assert.match(err, 'EBADF')
+        local data, err = u[method](u, 1)
+        if method == 'bytes' then
+            assert.is_string(data)
+        else
+            assert.is_table(data)
+        end
+        assert.equal(#data, 1)
+        assert.is_nil(err)
     end
 end

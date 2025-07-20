@@ -4,7 +4,10 @@
 [![codecov](https://codecov.io/gh/mah0x211/lua-os-urandom/branch/master/graph/badge.svg)](https://codecov.io/gh/mah0x211/lua-os-urandom)
 
 
-`lua-os-urandom` is a Lua module for safely obtaining random bytes and random integers from the operating system's entropy source `/dev/urandom`.
+`lua-os-urandom` is a Lua module for safely obtaining random bytes and random integers from;
+
+- the operating system's secure random number generator (RNG) such as `/dev/urandom` on Unix-like systems, or
+- Use the OpenSSL library if it is available.
 
 
 ## Installation
@@ -20,8 +23,8 @@ luarocks install os-urandom
 local dump = require('dump')
 local urandom = require('os.urandom')
 
--- open a `/dev/urandom` file descriptor and return an instance of os.urandom
-local u = assert(urandom())
+-- create an instance of os.urandom
+local u = urandom()
 print(u) -- os.urandom: 0x600003e308d8
 
 -- get the 5 bytes of string from the internal buffer.
@@ -58,7 +61,7 @@ print(dump(arr))
 --     [4] = 1269583660
 -- }
 
--- close the `/dev/urandom` file descriptor.
+-- close the `/dev/urandom` file descriptor if it is opened.
 -- you cannot use this instance after calling this method.
 u:close()
 ```
@@ -69,36 +72,25 @@ u:close()
 the following functions return an `error` object created by https://github.com/mah0x211/lua-errno module.
 
 
-## u, err = urandom( [pathname] )
+## u = urandom()
 
-open `/dev/urandom` or specified pathname and return an instance of `os.urandom`.
-
-**Parameters**
-
-- `pathname:string?`: path to the random source. if omitted, `/dev/urandom` will be opened by default.
+return an instance of `os.urandom`.
 
 **Returns**
 
 - `u:os.urandom`: an `os.urandom` object.
-- `err:any`: an error object if the operation fails.
 
 **Example**
 
 ```lua
 local urandom = require('os.urandom')
-
--- open the default random source (`/dev/urandom`).
-local u = assert(urandom())
-print(u) -- os.urandom: ...
-
--- open a custom random source.
-u = assert(urandom('/dev/random'))
+local u = urandom()
 print(u) -- os.urandom: ...
 ```
 
 ## urandom:close()
 
-close the `/dev/urandom` file descriptor and free the internal buffer. you cannot use this instance after calling this method.
+close the `/dev/urandom` file descriptor if it is opened.
 
 
 ## s, err = urandom:bytes( nbyte )
@@ -108,7 +100,6 @@ get specified number of bytes as a string.
 **Parameters**
 
 - `nbyte:pint`: number of bytes to get.
-- `offset:pint`: starting byte offset. defaults to `1`.
 
 **Returns**
 
@@ -143,7 +134,7 @@ same as `urandom:get8u()`.
 same as `urandom:get8u()`.
 
 
-## arr, err = urandom:get32u( [count] [, offset] )
+## arr, err = urandom:get32u( count )
 
 get uint32 integers.
 
