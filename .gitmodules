@@ -1,3 +1,0 @@
-[submodule "deps/secrandom"]
-	path = deps/secrandom
-	url = git@github.com:mah0x211/secrandom.git
