@@ -28,13 +28,14 @@
 #include <stdio.h>
 #include <unistd.h>
 // lua
+#include "../deps/secrandom/src/secrandom.h"
 #include "lauxhlib.h"
 #include "lua_errno.h"
 
 #define MODULE_MT "os.urandom"
 
 typedef struct {
-    int fd;
+    int fd_cached; // cached file descriptor for /dev/urandom
     int ref_buf;
     size_t len;
     union {
@@ -48,38 +49,17 @@ typedef struct {
 static int read_urandom(lua_State *L, urandom_t *u, size_t nbyte,
                         const char *op)
 {
-    char *buf     = NULL;
-    char *ptr     = NULL;
-    size_t remain = nbyte;
+    char *buf = (nbyte > u->len) ? lua_newuserdata(L, nbyte) : u->buf;
 
-    if (u->fd == -1) {
-        // fd is not opened
-        lua_pushnil(L);
-        errno = EBADF;
-        lua_errno_new(L, errno, op);
-        return 2;
-    }
-
-    buf = (nbyte != u->len) ? lua_newuserdata(L, nbyte) : u->buf;
-    ptr = buf;
-    while (remain > 0) {
-        ssize_t n = read(u->fd, ptr, remain);
-        if (n > 0) {
-            remain -= (size_t)n;
-            ptr += n;
-            continue;
-        }
-
-        // got error
-        if (n == 0) {
-            errno = EIO;
-        }
+    if (secrandom(buf, nbyte, &u->fd_cached) != SECRANDOM_SUCCESS) {
+        // secrandom failed
         lua_pushnil(L);
         lua_errno_new(L, errno, op);
         return 2;
     }
 
     if (buf != u->buf) {
+        // if the buffer is different, free the old one and set the new one
         u->buf     = buf;
         u->len     = nbyte;
         u->ref_buf = lauxh_unref(L, u->ref_buf);
@@ -91,10 +71,20 @@ static int read_urandom(lua_State *L, urandom_t *u, size_t nbyte,
 
 static inline int getu_lua(lua_State *L, const char *op, int nbit)
 {
-    urandom_t *u = luaL_checkudata(L, 1, MODULE_MT);
-    size_t count = (size_t)lauxh_checkpint(L, 2);
-    int rc       = read_urandom(L, u, count * (nbit / 8), op);
+    urandom_t *u      = luaL_checkudata(L, 1, MODULE_MT);
+    size_t count      = (size_t)lauxh_checkpint(L, 2);
+    size_t bytes_elem = nbit / 8;
+    int rc            = 0;
 
+    // check for overflow before multiplication
+    // also check if count is too large for lua_createtable's narr parameter
+    if (count > (SIZE_MAX / bytes_elem) || count > INT_MAX) {
+        lua_pushnil(L);
+        lua_errno_new(L, ERANGE, op);
+        return 2;
+    }
+
+    rc = read_urandom(L, u, count * bytes_elem, op);
     if (rc != 0) {
         // read error
         return rc;
@@ -103,9 +93,9 @@ static inline int getu_lua(lua_State *L, const char *op, int nbit)
     lua_settop(L, 1);
     lua_createtable(L, count, 0);
 
-#define push_ival(v)                                                           \
+#define push_ival(t, v)                                                        \
     do {                                                                       \
-        typeof(v) p = (v);                                                     \
+        t *p = (v);                                                            \
         for (size_t i = 1; i <= count; i++) {                                  \
             lauxh_pushint2arr(L, i, *p);                                       \
             p++;                                                               \
@@ -113,11 +103,11 @@ static inline int getu_lua(lua_State *L, const char *op, int nbit)
     } while (0)
 
     if (nbit == 8) {
-        push_ival(u->i8);
+        push_ival(uint8_t, u->i8);
     } else if (nbit == 16) {
-        push_ival(u->i16);
+        push_ival(uint16_t, u->i16);
     } else if (nbit == 32) {
-        push_ival(u->i32);
+        push_ival(uint32_t, u->i32);
     }
 
 #undef push_ival
@@ -158,11 +148,10 @@ static int close_lua(lua_State *L)
 {
     urandom_t *u = luaL_checkudata(L, 1, MODULE_MT);
 
-    if (u->fd != -1) {
-        close(u->fd);
-        u->fd = -1;
+    if (u->fd_cached != -1) {
+        close(u->fd_cached);
+        u->fd_cached = -1;
     }
-    u->ref_buf = lauxh_unref(L, u->ref_buf);
 
     return 0;
 }
@@ -178,8 +167,8 @@ static int gc_lua(lua_State *L)
 {
     urandom_t *u = lua_touserdata(L, 1);
 
-    if (u->fd != -1) {
-        close(u->fd);
+    if (u->fd_cached != -1) {
+        close(u->fd_cached);
     }
     lauxh_unref(L, u->ref_buf);
 
@@ -188,24 +177,15 @@ static int gc_lua(lua_State *L)
 
 static int new_lua(lua_State *L)
 {
-    const char *pathname = lauxh_optstr(L, 1, "/dev/urandom");
-    urandom_t *u         = lua_newuserdata(L, sizeof(urandom_t));
+    urandom_t *u = lua_newuserdata(L, sizeof(urandom_t));
 
     *u = (urandom_t){
-        .fd      = -1,
-        .buf     = NULL,
-        .len     = 0,
-        .ref_buf = LUA_NOREF,
+        .fd_cached = -1,
+        .buf       = NULL,
+        .len       = 0,
+        .ref_buf   = LUA_NOREF,
     };
     lauxh_setmetatable(L, MODULE_MT);
-
-    // open the urandom file descriptor
-    u->fd = open(pathname, O_RDONLY | O_CLOEXEC);
-    if (u->fd < 0) {
-        lua_pushnil(L);
-        lua_errno_new(L, errno, "os.urandom");
-        return 2;
-    }
 
     return 1;
 }
