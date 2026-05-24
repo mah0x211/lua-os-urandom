@@ -1,3 +1,4 @@
+rockspec_format = "3.0"
 package = "os-urandom"
 version = "dev-1"
 source = {
@@ -14,18 +15,29 @@ dependencies = {
     "errno >= 0.5.0",
     "lauxhlib >= 0.6.2",
 }
+build_dependencies = {
+    "luarocks-build-hooks >= 0.7.0",
+}
 build = {
-    type = "make",
-    build_variables = {
-        LIB_EXTENSION = "$(LIB_EXTENSION)",
-        CFLAGS = "$(CFLAGS)",
-        WARNINGS = "-Wall -Wno-trigraphs -Wmissing-field-initializers -Wreturn-type -Wmissing-braces -Wparentheses -Wno-switch -Wunused-function -Wunused-label -Wunused-parameter -Wunused-variable -Wunused-value -Wuninitialized -Wunknown-pragmas -Wshadow -Wsign-compare",
-        CPPFLAGS = "-I$(LUA_INCDIR)",
-        LDFLAGS = "$(LIBFLAG)",
-        OS_URANDOM_COVERAGE = "$(OS_URANDOM_COVERAGE)",
+    type = 'hooks',
+    before_build = "$(extra-vars)",
+    -- Extra values to append to existing variables
+    extra_variables = {
+        CFLAGS = "-Wall -Wno-trigraphs -Wmissing-field-initializers -Wreturn-type -Wmissing-braces -Wparentheses -Wno-switch -Wunused-function -Wunused-label -Wunused-parameter -Wunused-variable -Wunused-value -Wuninitialized -Wunknown-pragmas -Wshadow -Wsign-compare",
     },
-    install_variables = {
-        LIB_EXTENSION = "$(LIB_EXTENSION)",
-        INST_LIBDIR = "$(LIBDIR)/os/",
+    conditional_variables = {
+        OS_URANDOM_COVERAGE = {
+            CFLAGS = "--coverage",
+            LIBFLAG = "--coverage",
+        },
+    },
+    modules = {
+        ["os.urandom"] = {
+            sources = "src/urandom.c",
+            incdirs = {
+                "$(DEP_ERRNO_INCDIR)",
+                "$(DEP_LAUXHLIB_INCDIR)",
+            },
+        },
     },
 }
