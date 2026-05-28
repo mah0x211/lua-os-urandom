@@ -21,16 +21,18 @@
  *
  */
 
-#include <errno.h>
-#include <fcntl.h>
-#include <limits.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <unistd.h>
-// lua
+// project
+#include "secrandom.h"
+// depend
 #include "lauxhlib.h"
 #include "lua_errno.h"
-#include "secrandom.h"
+// lua
+#include <lauxlib.h>
+// system
+#include <errno.h>
+#include <limits.h>
+#include <stdint.h>
+#include <unistd.h>
 
 #define MODULE_MT "os.urandom"
 
